@@ -1,0 +1,17 @@
+# Project Eris – Python dependencies
+# Install with:  pip install -r requirements.txt
+
+# GUI framework — modern-looking widgets built on top of Tkinter
+customtkinter>=5.2.0
+
+# Image loading — required for the logo in the sidebar
+pillow>=10.0.0
+
+# Allen-Bradley PLC communication (ControlLogix, CompactLogix, Micro8xx)
+pylogix>=1.0.0
+
+# Siemens S7 PLC communication (S7-300, S7-400, S7-1200, S7-1500)
+python-snap7>=3.0
+
+# Trend chart on the Dashboard screen
+matplotlib>=3.7.0

@@ -1,0 +1,26 @@
+{
+  // ── Project Eris – VS Code debugger configuration ─────────────────────
+  // Press F5 to start the app with the debugger attached.
+  // Click in the gutter next to any line number to set a breakpoint.
+
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Project Eris",
+      "type": "debugpy",
+      "request": "launch",
+
+      // Always start from main.py
+      "program": "${workspaceFolder}/main.py",
+
+      // Run from the project root so relative paths (assets/, config.py) work
+      "cwd": "${workspaceFolder}",
+
+      // Show stdout/stderr in VS Code's integrated terminal
+      "console": "integratedTerminal",
+
+      // Only pause on exceptions in your own code (not inside library code)
+      "justMyCode": true
+    }
+  ]
+}

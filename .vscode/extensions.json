@@ -1,0 +1,22 @@
+{
+  // ── Recommended VS Code extensions for Project Eris ───────────────────
+  // VS Code will prompt you to install these when you open the project.
+  // All are free from the official marketplace.
+
+  "recommendations": [
+    // Core Python support: IntelliSense, linting, virtual environments
+    "ms-python.python",
+
+    // Pylance: fast type checking and autocomplete engine (works with above)
+    "ms-python.vscode-pylance",
+
+    // Debugpy: modern Python debugger integration
+    "ms-python.debugpy",
+
+    // Highlights TODO / FIXME / HACK comments so they're easy to find
+    "gruntfuggly.todo-tree",
+
+    // Shows color swatches next to hex values — handy when editing theme.py
+    "naumovs.color-highlight"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  // ── Project Eris – VS Code workspace settings ──────────────────────────
+  // These settings apply only to this project folder, not globally.
+
+  // Python interpreter — points to your system Python 3.
+  // If you create a virtual environment (.venv), change this to:
+  //   "${workspaceFolder}/.venv/Scripts/python.exe"
+  "python.defaultInterpreterPath": "python",
+
+  // Show a vertical ruler at 100 characters as a soft line-length guide
+  "editor.rulers": [100],
+
+  // Use 4 spaces per indent level (standard Python convention)
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+
+  // Trim trailing whitespace and add a newline at end of file on save
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // Syntax highlighting for batch scripts
+  "files.associations": {
+    "*.bat": "bat"
+  },
+
+  // Hide build artifacts and cache from the Explorer sidebar
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/*.spec": true
+  },
+
+  // Python-specific: show type hints inline and flag undefined variables
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.inlayHints.variableTypes": false
+}
