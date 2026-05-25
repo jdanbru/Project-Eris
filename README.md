@@ -1,4 +1,4 @@
-# Project Eris v2.0
+# Project Eris v4.3.1
 
 PLC datalogger supporting Allen-Bradley (pylogix) and Siemens S7 (python-snap7).
 Features interval and trigger-based logging, per-connection CSV files,
