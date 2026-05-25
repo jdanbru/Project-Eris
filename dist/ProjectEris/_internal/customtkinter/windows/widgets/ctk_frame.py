@@ -4,6 +4,7 @@ from .core_rendering import CTkCanvas
 from .theme import ThemeManager
 from .core_rendering import DrawEngine
 from .core_widget_classes import CTkBaseClass
+import customtkinter.windows.widgets as widgets
 
 
 class CTkFrame(CTkBaseClass):
@@ -44,6 +45,8 @@ class CTkFrame(CTkBaseClass):
                     self._fg_color = ThemeManager.theme["CTkFrame"]["fg_color"]
             else:
                 self._fg_color = ThemeManager.theme["CTkFrame"]["fg_color"]
+            if isinstance(self.master, widgets.ctk_scrollable_frame.CTkScrollableFrame):
+                self._fg_color = ThemeManager.theme["CTkFrame"]["top_fg_color"]
         else:
             self._fg_color = self._check_color_type(fg_color, transparency=True)
 
@@ -132,6 +135,14 @@ class CTkFrame(CTkBaseClass):
         # self._canvas.tag_lower("border_parts")
 
     def configure(self, require_redraw=False, **kwargs):
+        if "corner_radius" in kwargs:
+            self._corner_radius = kwargs.pop("corner_radius")
+            require_redraw = True
+
+        if "border_width" in kwargs:
+            self._border_width = kwargs.pop("border_width")
+            require_redraw = True
+
         if "fg_color" in kwargs:
             self._fg_color = self._check_color_type(kwargs.pop("fg_color"), transparency=True)
             require_redraw = True
@@ -154,14 +165,6 @@ class CTkFrame(CTkBaseClass):
 
         if "background_corner_colors" in kwargs:
             self._background_corner_colors = kwargs.pop("background_corner_colors")
-            require_redraw = True
-
-        if "corner_radius" in kwargs:
-            self._corner_radius = kwargs.pop("corner_radius")
-            require_redraw = True
-
-        if "border_width" in kwargs:
-            self._border_width = kwargs.pop("border_width")
             require_redraw = True
 
         super().configure(require_redraw=require_redraw, **kwargs)

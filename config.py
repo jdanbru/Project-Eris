@@ -31,7 +31,6 @@ DEFAULT_CONFIG = {
     "auto_connect":     True,        # connect to all PLCs on startup
     "auto_log":         False,       # start logging automatically on startup
     "minimize_to_tray": False,       # minimize to system tray instead of closing
-    "theme":            "light",     # "light" or "dark"
 }
 
 

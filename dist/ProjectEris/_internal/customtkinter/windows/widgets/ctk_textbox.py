@@ -7,7 +7,7 @@ from .theme import ThemeManager
 from .core_rendering import DrawEngine
 from .core_widget_classes import CTkBaseClass
 from .font import CTkFont
-from .utility import pop_from_dict_by_set, check_kwargs_empty
+from .utility import pop_from_dict_by_set, check_kwargs_empty, attach_unicode_keyboard_recovery
 
 
 class CTkTextbox(CTkBaseClass):
@@ -29,7 +29,7 @@ class CTkTextbox(CTkBaseClass):
                                  "insertborderwidth", "insertofftime", "insertontime", "insertwidth",
                                  "maxundo", "padx", "pady", "selectborderwidth", "spacing1",
                                  "spacing2", "spacing3", "state", "tabs", "takefocus", "undo", "wrap",
-                                 "xscrollcommand", "yscrollcommand"}
+                                 "xscrollcommand", "yscrollcommand", "selectforeground", "selectbackground"}
 
     def __init__(self,
                  master: any,
@@ -48,6 +48,7 @@ class CTkTextbox(CTkBaseClass):
 
                  font: Optional[Union[tuple, CTkFont]] = None,
                  activate_scrollbars: bool = True,
+                 rich_text: bool = False,
                  **kwargs):
 
         # transfer basic functionality (_bg_color, size, __appearance_mode, scaling) to CTkBaseClass
@@ -90,6 +91,8 @@ class CTkTextbox(CTkBaseClass):
 
         check_kwargs_empty(kwargs, raise_error=True)
 
+        attach_unicode_keyboard_recovery(self._textbox)
+
         # scrollbars
         self._scrollbars_activated = activate_scrollbars
         self._hide_x_scrollbar = True
@@ -119,8 +122,17 @@ class CTkTextbox(CTkBaseClass):
 
         self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
 
-        self.after(50, self._check_if_scrollbars_needed, None, True)
+        self._scrollbar_after_id = self.after(50, self._check_if_scrollbars_needed, None, True)
         self._draw()
+
+        # rich-text rendering state (opt-in via rich_text=True). See
+        # set_rich_text() — parses Unity-style inline tags into per-tag
+        # foreground/background/font on the inner tk.Text. Used as-is by
+        # CTkRichLabel (always-on) and by CTkMaker's optional CTkTextbox
+        # rich-text flag.
+        self._rich_text_enabled = bool(rich_text)
+        self._rich_text = ""
+        self._rich_tag_cache: dict = {}
 
     def _create_grid_for_text_and_scrollbars(self, re_grid_textbox=False, re_grid_x_scrollbar=False, re_grid_y_scrollbar=False):
 
@@ -174,7 +186,7 @@ class CTkTextbox(CTkBaseClass):
             self._create_grid_for_text_and_scrollbars(re_grid_y_scrollbar=True)
 
         if self._textbox.winfo_exists() and continue_loop is True:
-            self.after(self._scrollbar_update_time, lambda: self._check_if_scrollbars_needed(continue_loop=True))
+            self._scrollbar_after_id = self.after(self._scrollbar_update_time, lambda: self._check_if_scrollbars_needed(continue_loop=True))
 
     def _set_scaling(self, *args, **kwargs):
         super()._set_scaling(*args, **kwargs)
@@ -202,6 +214,10 @@ class CTkTextbox(CTkBaseClass):
         self._canvas.grid(row=0, column=0, rowspan=2, columnspan=2, sticky="nsew")
 
     def destroy(self):
+        if self._scrollbar_after_id is not None:
+            self.after_cancel(self._scrollbar_after_id)
+            self._scrollbar_after_id = None
+
         if isinstance(self._font, CTkFont):
             self._font.remove_size_configure_callback(self._update_font)
 
@@ -251,6 +267,21 @@ class CTkTextbox(CTkBaseClass):
         self._canvas.tag_lower("border_parts")
 
     def configure(self, require_redraw=False, **kwargs):
+        if "corner_radius" in kwargs:
+            self._corner_radius = kwargs.pop("corner_radius")
+            self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
+            require_redraw = True
+
+        if "border_width" in kwargs:
+            self._border_width = kwargs.pop("border_width")
+            self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
+            require_redraw = True
+
+        if "border_spacing" in kwargs:
+            self._border_spacing = kwargs.pop("border_spacing")
+            self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
+            require_redraw = True
+
         if "fg_color" in kwargs:
             self._fg_color = self._check_color_type(kwargs.pop("fg_color"), transparency=True)
             require_redraw = True
@@ -278,28 +309,12 @@ class CTkTextbox(CTkBaseClass):
             self._x_scrollbar.configure(button_hover_color=self._scrollbar_button_hover_color)
             self._y_scrollbar.configure(button_hover_color=self._scrollbar_button_hover_color)
 
-        if "corner_radius" in kwargs:
-            self._corner_radius = kwargs.pop("corner_radius")
-            self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
-            require_redraw = True
-
-        if "border_width" in kwargs:
-            self._border_width = kwargs.pop("border_width")
-            self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
-            require_redraw = True
-
-        if "border_spacing" in kwargs:
-            self._border_spacing = kwargs.pop("border_spacing")
-            self._create_grid_for_text_and_scrollbars(re_grid_textbox=True, re_grid_x_scrollbar=True, re_grid_y_scrollbar=True)
-            require_redraw = True
-
         if "font" in kwargs:
             if isinstance(self._font, CTkFont):
                 self._font.remove_size_configure_callback(self._update_font)
             self._font = self._check_font_type(kwargs.pop("font"))
             if isinstance(self._font, CTkFont):
                 self._font.add_size_configure_callback(self._update_font)
-
             self._update_font()
 
         self._textbox.configure(**pop_from_dict_by_set(kwargs, self._valid_tk_text_attributes))
@@ -319,10 +334,18 @@ class CTkTextbox(CTkBaseClass):
             return self._border_color
         elif attribute_name == "text_color":
             return self._text_color
+        elif attribute_name == "scrollbar_button_color":
+            return self._scrollbar_button_color
+        elif attribute_name == "scrollbar_button_hover_color":
+            return self._scrollbar_button_hover_color
 
         elif attribute_name == "font":
             return self._font
+        elif attribute_name == "activate_scrollbars":
+            return self._scrollbars_activated
 
+        elif attribute_name in self._valid_tk_text_attributes:
+            return self._textbox.cget(attribute_name)  # cget of tkinter.Text
         else:
             return super().cget(attribute_name)
 
@@ -353,6 +376,159 @@ class CTkTextbox(CTkBaseClass):
 
     def get(self, index1, index2=None):
         return self._textbox.get(index1, index2)
+
+    # ---- rich-text rendering (opt-in via rich_text=True) ----------
+
+    def set_rich_text(self, text: str) -> None:
+        """Replace the textbox content with text parsed as Unity-style
+        rich text. Each chunk is inserted with a per-style tk.Text tag
+        carrying the resolved foreground / background / font.
+
+        Always parses, regardless of ``rich_text_enabled`` — call this
+        when you specifically want rich-text rendering. To branch on the
+        flag use ``is_rich_text_enabled()``.
+        """
+        import tkinter.font as tkfont
+        from .utility.rich_text_parser import Style, parse
+
+        self._rich_text = text
+        inner = self._textbox
+
+        # Drop the cache so font / colour changes via configure() take
+        # effect on the next render — cached tags would pin the old
+        # values otherwise.
+        for old_tag in self._rich_tag_cache.values():
+            try:
+                inner.tag_delete(old_tag)
+            except tkinter.TclError:
+                pass
+        self._rich_tag_cache.clear()
+
+        prev_state = str(inner.cget("state"))
+        if prev_state == "disabled":
+            inner.configure(state="normal")
+        try:
+            inner.delete("1.0", "end")
+            chunks = parse(text, Style(size=self._rich_base_size()))
+            for ch in chunks:
+                tag = self._rich_tag_for(ch.style)
+                inner.insert("end", ch.text, tag)
+        finally:
+            if prev_state == "disabled":
+                inner.configure(state="disabled")
+
+    def set_rich_text_enabled(self, enabled: bool) -> None:
+        """Toggle the rich-text flag. Re-renders the stored content if
+        the flag changes (last call to ``set_rich_text`` / plain insert
+        determines what gets re-rendered)."""
+        new_value = bool(enabled)
+        if new_value == self._rich_text_enabled:
+            return
+        self._rich_text_enabled = new_value
+        if new_value and self._rich_text:
+            self.set_rich_text(self._rich_text)
+
+    def is_rich_text_enabled(self) -> bool:
+        return self._rich_text_enabled
+
+    def _rich_base_size(self):
+        f = self._font
+        if isinstance(f, (tuple, list)) and len(f) >= 2:
+            try:
+                return int(f[1])
+            except (ValueError, TypeError):
+                return None
+        if hasattr(f, "cget"):
+            try:
+                return int(f.cget("size"))
+            except tkinter.TclError:
+                return None
+        return None
+
+    def _rich_base_font_actual(self) -> dict:
+        """Family / size / weight / slant / underline / overstrike of the
+        inner Text's current effective font, in Tk units (size negative =
+        pixels, positive = points). Reads via ``cget("font")`` so it
+        tracks live configure(font=…) changes."""
+        defaults = {
+            "family": "TkDefaultFont", "size": 13,
+            "weight": "normal", "slant": "roman",
+            "underline": 0, "overstrike": 0,
+        }
+        try:
+            import tkinter.font as tkfont
+            spec = self._textbox.cget("font")
+            if isinstance(spec, str):
+                pf = tkfont.Font(font=spec)
+            elif hasattr(spec, "cget"):
+                pf = spec
+            else:
+                return defaults
+            return {
+                "family": str(pf.cget("family")),
+                "size": int(pf.cget("size")),
+                "weight": str(pf.cget("weight")),
+                "slant": str(pf.cget("slant")),
+                "underline": int(pf.cget("underline")),
+                "overstrike": int(pf.cget("overstrike")),
+            }
+        except Exception:
+            return defaults
+
+    def _rich_default_fg(self) -> str:
+        tc = getattr(self, "_text_color", None)
+        if tc is None:
+            return "#dce4ee"
+        try:
+            return str(self._apply_appearance_mode(tc))
+        except Exception:
+            if isinstance(tc, (tuple, list)) and tc:
+                return str(tc[-1])
+            return str(tc)
+
+    def _rich_widget_scaling(self) -> float:
+        try:
+            return float(self._get_widget_scaling())
+        except Exception:
+            return 1.0
+
+    def _rich_tag_for(self, style) -> str:
+        cached = self._rich_tag_cache.get(style)
+        if cached is not None:
+            return cached
+
+        import tkinter.font as tkfont
+
+        name = f"_rich_{len(self._rich_tag_cache)}"
+        self._rich_tag_cache[style] = name
+
+        cfg: dict = {
+            "foreground": style.color or self._rich_default_fg(),
+        }
+        if style.bg is not None:
+            cfg["background"] = style.bg
+
+        # Always rebuild the font so widget-level font_bold / italic /
+        # underline / overstrike / family / size propagate to chunks.
+        # ``<b>`` / ``<i>`` / ``<u>`` LAYER on top — never strip a
+        # widget-level setting.
+        base = self._rich_base_font_actual()
+        size = (
+            -max(1, int(round(style.size * self._rich_widget_scaling())))
+            if style.size is not None
+            else base["size"]
+        )
+        cfg["font"] = tkfont.Font(
+            family=base["family"],
+            size=size,
+            weight="bold" if style.bold or base["weight"] == "bold" else "normal",
+            slant="italic" if style.italic or base["slant"] == "italic" else "roman",
+            underline=1 if style.underline or base["underline"] else 0,
+            overstrike=base["overstrike"],
+        )
+
+        self._textbox.tag_configure(name, **cfg)
+        return name
 
     def bbox(self, index):
         return self._textbox.bbox(index)

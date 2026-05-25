@@ -6,6 +6,7 @@ from .widgets import CTkButton
 from .widgets.theme import ThemeManager
 from .ctk_toplevel import CTkToplevel
 from .widgets.font import CTkFont
+from .widgets.utility.utility_functions import safe_focus
 
 
 class CTkInputDialog(CTkToplevel):
@@ -31,7 +32,7 @@ class CTkInputDialog(CTkToplevel):
         super().__init__(fg_color=fg_color)
 
         self._fg_color = ThemeManager.theme["CTkToplevel"]["fg_color"] if fg_color is None else self._check_color_type(fg_color)
-        self._text_color = ThemeManager.theme["CTkLabel"]["text_color"] if text_color is None else self._check_color_type(button_hover_color)
+        self._text_color = ThemeManager.theme["CTkLabel"]["text_color"] if text_color is None else self._check_color_type(text_color)
         self._button_fg_color = ThemeManager.theme["CTkButton"]["fg_color"] if button_fg_color is None else self._check_color_type(button_fg_color)
         self._button_hover_color = ThemeManager.theme["CTkButton"]["hover_color"] if button_hover_color is None else self._check_color_type(button_hover_color)
         self._button_text_color = ThemeManager.theme["CTkButton"]["text_color"] if button_text_color is None else self._check_color_type(button_text_color)
@@ -96,7 +97,7 @@ class CTkInputDialog(CTkToplevel):
                                         command=self._cancel_event)
         self._cancel_button.grid(row=2, column=1, columnspan=1, padx=(10, 20), pady=(0, 20), sticky="ew")
 
-        self.after(150, lambda: self._entry.focus())  # set focus to entry with slight delay, otherwise it won't work
+        self.after(150, safe_focus, self._entry)  # set focus to entry with slight delay, otherwise it won't work
         self._entry.bind("<Return>", self._ok_event)
 
     def _ok_event(self, event=None):

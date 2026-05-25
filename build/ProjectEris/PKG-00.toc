@@ -1,5 +1,5 @@
 ('C:\\Work\\JD Controls\\Project '
- 'Eris\\project_eris_v3.0\\project_eris_v3\\build\\ProjectEris\\ProjectEris.pkg',
+ 'Eris\\project_eris_v4.3.1\\eris_v5\\build\\ProjectEris\\ProjectEris.pkg',
  {'BINARY': True,
   'DATA': True,
   'EXECUTABLE': True,
@@ -12,27 +12,27 @@
  [('pyi-contents-directory _internal', '', 'OPTION'),
   ('PYZ-00.pyz',
    'C:\\Work\\JD Controls\\Project '
-   'Eris\\project_eris_v3.0\\project_eris_v3\\build\\ProjectEris\\PYZ-00.pyz',
+   'Eris\\project_eris_v4.3.1\\eris_v5\\build\\ProjectEris\\PYZ-00.pyz',
    'PYZ'),
   ('struct',
    'C:\\Work\\JD Controls\\Project '
-   'Eris\\project_eris_v3.0\\project_eris_v3\\build\\ProjectEris\\localpycs\\struct.pyc',
+   'Eris\\project_eris_v4.3.1\\eris_v5\\build\\ProjectEris\\localpycs\\struct.pyc',
    'PYMODULE'),
   ('pyimod01_archive',
    'C:\\Work\\JD Controls\\Project '
-   'Eris\\project_eris_v3.0\\project_eris_v3\\build\\ProjectEris\\localpycs\\pyimod01_archive.pyc',
+   'Eris\\project_eris_v4.3.1\\eris_v5\\build\\ProjectEris\\localpycs\\pyimod01_archive.pyc',
    'PYMODULE'),
   ('pyimod02_importers',
    'C:\\Work\\JD Controls\\Project '
-   'Eris\\project_eris_v3.0\\project_eris_v3\\build\\ProjectEris\\localpycs\\pyimod02_importers.pyc',
+   'Eris\\project_eris_v4.3.1\\eris_v5\\build\\ProjectEris\\localpycs\\pyimod02_importers.pyc',
    'PYMODULE'),
   ('pyimod03_ctypes',
    'C:\\Work\\JD Controls\\Project '
-   'Eris\\project_eris_v3.0\\project_eris_v3\\build\\ProjectEris\\localpycs\\pyimod03_ctypes.pyc',
+   'Eris\\project_eris_v4.3.1\\eris_v5\\build\\ProjectEris\\localpycs\\pyimod03_ctypes.pyc',
    'PYMODULE'),
   ('pyimod04_pywin32',
    'C:\\Work\\JD Controls\\Project '
-   'Eris\\project_eris_v3.0\\project_eris_v3\\build\\ProjectEris\\localpycs\\pyimod04_pywin32.pyc',
+   'Eris\\project_eris_v4.3.1\\eris_v5\\build\\ProjectEris\\localpycs\\pyimod04_pywin32.pyc',
    'PYMODULE'),
   ('pyiboot01_bootstrap',
    'C:\\Users\\Justin\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
@@ -52,9 +52,11 @@
   ('pyi_rth__tkinter',
    'C:\\Users\\Justin\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth__tkinter.py',
    'PYSOURCE'),
+  ('pyi_rth_setuptools',
+   'C:\\Users\\Justin\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_setuptools.py',
+   'PYSOURCE'),
   ('main',
-   'C:\\Work\\JD Controls\\Project '
-   'Eris\\project_eris_v3.0\\project_eris_v3\\main.py',
+   'C:\\Work\\JD Controls\\Project Eris\\project_eris_v4.3.1\\eris_v5\\main.py',
    'PYSOURCE')],
  'python313.dll',
  True,

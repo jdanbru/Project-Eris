@@ -6,6 +6,7 @@ from .core_rendering import CTkCanvas
 from .theme import ThemeManager
 from .core_rendering import DrawEngine
 from .core_widget_classes import CTkBaseClass
+from .utility import derive_disabled_color
 
 
 class CTkSlider(CTkBaseClass):
@@ -29,11 +30,15 @@ class CTkSlider(CTkBaseClass):
                  progress_color: Optional[Union[str, Tuple[str, str]]] = None,
                  button_color: Optional[Union[str, Tuple[str, str]]] = None,
                  button_hover_color: Optional[Union[str, Tuple[str, str]]] = None,
+                 fg_color_disabled: Optional[Union[str, Tuple[str, str]]] = None,
+                 progress_color_disabled: Optional[Union[str, Tuple[str, str]]] = None,
+                 button_color_disabled: Optional[Union[str, Tuple[str, str]]] = None,
 
                  from_: int = 0,
                  to: int = 1,
                  state: str = "normal",
                  number_of_steps: Union[int, None] = None,
+                 scroll_step: Optional[Union[int, float]] = None,
                  hover: bool = True,
                  command: Union[Callable[[float], Any], None] = None,
                  variable: Union[tkinter.Variable, None] = None,
@@ -62,6 +67,11 @@ class CTkSlider(CTkBaseClass):
         self._button_color = ThemeManager.theme["CTkSlider"]["button_color"] if button_color is None else self._check_color_type(button_color)
         self._button_hover_color = ThemeManager.theme["CTkSlider"]["button_hover_color"] if button_hover_color is None else self._check_color_type(button_hover_color)
 
+        # disabled-state colors — None default → auto-derived (dimmed) from the enabled colors in _draw()
+        self._fg_color_disabled = None if fg_color_disabled is None else self._check_color_type(fg_color_disabled)
+        self._progress_color_disabled = None if progress_color_disabled is None else self._check_color_type(progress_color_disabled, transparency=True)
+        self._button_color_disabled = None if button_color_disabled is None else self._check_color_type(button_color_disabled)
+
         # shape
         self._corner_radius = ThemeManager.theme["CTkSlider"]["corner_radius"] if corner_radius is None else corner_radius
         self._button_corner_radius = ThemeManager.theme["CTkSlider"]["button_corner_radius"] if button_corner_radius is None else button_corner_radius
@@ -74,6 +84,7 @@ class CTkSlider(CTkBaseClass):
         self._from_ = from_
         self._to = to
         self._number_of_steps = number_of_steps
+        self._scroll_step = (1 / (20 if number_of_steps is None else number_of_steps)) if scroll_step is None else scroll_step
         self._output_value = self._from_ + (self._value * (self._to - self._from_))
 
         if self._corner_radius < self._button_corner_radius:
@@ -116,6 +127,14 @@ class CTkSlider(CTkBaseClass):
             self._canvas.bind("<Button-1>", self._clicked)
         if sequence is None or sequence == "<B1-Motion>":
             self._canvas.bind("<B1-Motion>", self._clicked)
+        if "linux" in sys.platform:
+            if sequence is None or sequence == "<Button-4>":
+                self._canvas.bind("<Button-4>", self._mouse_scroll_event)
+            if sequence is None or sequence == "<Button-5>":
+                self._canvas.bind("<Button-5>", self._mouse_scroll_event)
+        else:
+            if sequence is None or sequence == "<MouseWheel>":
+                self._canvas.bind("<MouseWheel>", self._mouse_scroll_event)
 
     def _set_scaling(self, *args, **kwargs):
         super()._set_scaling(*args, **kwargs)
@@ -172,6 +191,17 @@ class CTkSlider(CTkBaseClass):
         if no_color_updates is False or requires_recoloring:
             self._canvas.configure(bg=self._apply_appearance_mode(self._bg_color))
 
+            # disabled-state palette — auto-derived (dimmed) from the enabled colors when the
+            # *_disabled kwargs are left at None, so a disabled slider is always visibly distinct.
+            if self._state == "disabled":
+                fg_color = derive_disabled_color(self, self._fg_color_disabled, self._fg_color, self._bg_color)
+                progress_color = derive_disabled_color(self, self._progress_color_disabled, self._progress_color, self._bg_color)
+                button_color = derive_disabled_color(self, self._button_color_disabled, self._button_color, self._bg_color)
+            else:
+                fg_color = self._fg_color
+                progress_color = self._progress_color
+                button_color = self._button_color
+
             if self._border_color == "transparent":
                 self._canvas.itemconfig("border_parts", fill=self._apply_appearance_mode(self._bg_color),
                                         outline=self._apply_appearance_mode(self._bg_color))
@@ -179,15 +209,15 @@ class CTkSlider(CTkBaseClass):
                 self._canvas.itemconfig("border_parts", fill=self._apply_appearance_mode(self._border_color),
                                         outline=self._apply_appearance_mode(self._border_color))
 
-            self._canvas.itemconfig("inner_parts", fill=self._apply_appearance_mode(self._fg_color),
-                                    outline=self._apply_appearance_mode(self._fg_color))
+            self._canvas.itemconfig("inner_parts", fill=self._apply_appearance_mode(fg_color),
+                                    outline=self._apply_appearance_mode(fg_color))
 
-            if self._progress_color == "transparent":
-                self._canvas.itemconfig("progress_parts", fill=self._apply_appearance_mode(self._fg_color),
-                                        outline=self._apply_appearance_mode(self._fg_color))
+            if progress_color == "transparent":
+                self._canvas.itemconfig("progress_parts", fill=self._apply_appearance_mode(fg_color),
+                                        outline=self._apply_appearance_mode(fg_color))
             else:
-                self._canvas.itemconfig("progress_parts", fill=self._apply_appearance_mode(self._progress_color),
-                                        outline=self._apply_appearance_mode(self._progress_color))
+                self._canvas.itemconfig("progress_parts", fill=self._apply_appearance_mode(progress_color),
+                                        outline=self._apply_appearance_mode(progress_color))
 
             if self._hover_state is True:
                 self._canvas.itemconfig("slider_parts",
@@ -195,8 +225,8 @@ class CTkSlider(CTkBaseClass):
                                         outline=self._apply_appearance_mode(self._button_hover_color))
             else:
                 self._canvas.itemconfig("slider_parts",
-                                        fill=self._apply_appearance_mode(self._button_color),
-                                        outline=self._apply_appearance_mode(self._button_color))
+                                        fill=self._apply_appearance_mode(button_color),
+                                        outline=self._apply_appearance_mode(button_color))
 
     def configure(self, require_redraw=False, **kwargs):
         if "corner_radius" in kwargs:
@@ -235,6 +265,21 @@ class CTkSlider(CTkBaseClass):
             self._button_hover_color = self._check_color_type(kwargs.pop("button_hover_color"))
             require_redraw = True
 
+        if "fg_color_disabled" in kwargs:
+            new_value = kwargs.pop("fg_color_disabled")
+            self._fg_color_disabled = None if new_value is None else self._check_color_type(new_value)
+            require_redraw = True
+
+        if "progress_color_disabled" in kwargs:
+            new_value = kwargs.pop("progress_color_disabled")
+            self._progress_color_disabled = None if new_value is None else self._check_color_type(new_value, transparency=True)
+            require_redraw = True
+
+        if "button_color_disabled" in kwargs:
+            new_value = kwargs.pop("button_color_disabled")
+            self._button_color_disabled = None if new_value is None else self._check_color_type(new_value)
+            require_redraw = True
+
         if "from_" in kwargs:
             self._from_ = kwargs.pop("from_")
 
@@ -249,6 +294,9 @@ class CTkSlider(CTkBaseClass):
         if "number_of_steps" in kwargs:
             self._number_of_steps = kwargs.pop("number_of_steps")
 
+        if "scroll_step" in kwargs:
+            self._scroll_step = kwargs.pop("scroll_step")
+
         if "hover" in kwargs:
             self._hover = kwargs.pop("hover")
 
@@ -258,14 +306,10 @@ class CTkSlider(CTkBaseClass):
         if "variable" in kwargs:
             if self._variable is not None:
                 self._variable.trace_remove("write", self._variable_callback_name)
-
             self._variable = kwargs.pop("variable")
-
             if self._variable is not None and self._variable != "":
                 self._variable_callback_name = self._variable.trace_add("write", self._variable_callback)
                 self.set(self._variable.get(), from_variable_callback=True)
-            else:
-                self._variable = None
 
         if "orientation" in kwargs:
             self._orientation = kwargs.pop("orientation")
@@ -293,6 +337,12 @@ class CTkSlider(CTkBaseClass):
             return self._button_color
         elif attribute_name == "button_hover_color":
             return self._button_hover_color
+        elif attribute_name == "fg_color_disabled":
+            return self._fg_color_disabled
+        elif attribute_name == "progress_color_disabled":
+            return self._progress_color_disabled
+        elif attribute_name == "button_color_disabled":
+            return self._button_color_disabled
 
         elif attribute_name == "from_":
             return self._from_
@@ -302,6 +352,8 @@ class CTkSlider(CTkBaseClass):
             return self._state
         elif attribute_name == "number_of_steps":
             return self._number_of_steps
+        elif attribute_name == "scroll_step":
+            return self._scroll_step
         elif attribute_name == "hover":
             return self._hover
         elif attribute_name == "command":
@@ -313,31 +365,39 @@ class CTkSlider(CTkBaseClass):
 
         else:
             return super().cget(attribute_name)
+        
+    def _update_value(self, value: float):
+        self._value = max(0.0, min(1.0, value))
+
+        self._output_value = self._round_to_step_size(self._from_ + (self._value * (self._to - self._from_)))
+        self._value = (self._output_value - self._from_) / (self._to - self._from_)
+
+        self._draw(no_color_updates=False)
+
+        if self._variable is not None:
+            self._variable_callback_blocked = True
+            self._variable.set(round(self._output_value) if isinstance(self._variable, tkinter.IntVar) else self._output_value)
+            self._variable_callback_blocked = False
+
+        if self._command is not None:
+            self._command(self._output_value)
 
     def _clicked(self, event=None):
         if self._state == "normal":
             if self._orientation.lower() == "horizontal":
-                self._value = self._reverse_widget_scaling(event.x / self._current_width)
+                value = self._reverse_widget_scaling(event.x / self._current_width)
             else:
-                self._value = 1 - self._reverse_widget_scaling(event.y / self._current_height)
+                value = 1.0 - self._reverse_widget_scaling(event.y / self._current_height)
 
-            if self._value > 1:
-                self._value = 1
-            if self._value < 0:
-                self._value = 0
+            self._update_value(value)
 
-            self._output_value = self._round_to_step_size(self._from_ + (self._value * (self._to - self._from_)))
-            self._value = (self._output_value - self._from_) / (self._to - self._from_)
+    def _mouse_scroll_event(self, event):
+        delta = self._scroll_step
+        #condition for both Linux and others OS
+        if event.delta < 0 or event.num == 5:
+            delta = -delta
 
-            self._draw(no_color_updates=False)
-
-            if self._variable is not None:
-                self._variable_callback_blocked = True
-                self._variable.set(round(self._output_value) if isinstance(self._variable, tkinter.IntVar) else self._output_value)
-                self._variable_callback_blocked = False
-
-            if self._command is not None:
-                self._command(self._output_value)
+        self._update_value(self._value + delta)
 
     def _on_enter(self, event=0):
         if self._hover is True and self._state == "normal":
@@ -348,9 +408,13 @@ class CTkSlider(CTkBaseClass):
 
     def _on_leave(self, event=0):
         self._hover_state = False
+        if self._state == "disabled":
+            button_color = derive_disabled_color(self, self._button_color_disabled, self._button_color, self._bg_color)
+        else:
+            button_color = self._button_color
         self._canvas.itemconfig("slider_parts",
-                                fill=self._apply_appearance_mode(self._button_color),
-                                outline=self._apply_appearance_mode(self._button_color))
+                                fill=self._apply_appearance_mode(button_color),
+                                outline=self._apply_appearance_mode(button_color))
 
     def _round_to_step_size(self, value) -> float:
         if self._number_of_steps is not None:
@@ -359,9 +423,6 @@ class CTkSlider(CTkBaseClass):
             return value
         else:
             return value
-
-    def get(self) -> float:
-        return self._output_value
 
     def set(self, output_value, from_variable_callback=False):
         if self._from_ < self._to:
@@ -384,6 +445,9 @@ class CTkSlider(CTkBaseClass):
             self._variable_callback_blocked = True
             self._variable.set(round(self._output_value) if isinstance(self._variable, tkinter.IntVar) else self._output_value)
             self._variable_callback_blocked = False
+
+    def get(self) -> float:
+        return self._output_value
 
     def _variable_callback(self, var_name, index, mode):
         if not self._variable_callback_blocked:

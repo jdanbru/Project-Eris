@@ -33,6 +33,8 @@ class CTkCheckBox(CTkBaseClass):
                  text_color_disabled: Optional[Union[str, Tuple[str, str]]] = None,
 
                  text: str = "CTkCheckBox",
+                 text_position: str = "right",
+                 text_spacing: int = 6,
                  font: Optional[Union[tuple, CTkFont]] = None,
                  textvariable: Union[tkinter.Variable, None] = None,
                  state: str = tkinter.NORMAL,
@@ -42,6 +44,12 @@ class CTkCheckBox(CTkBaseClass):
                  offvalue: Union[int, str] = 0,
                  variable: Union[tkinter.Variable, None] = None,
                  **kwargs):
+
+        # validate before super().__init__() registers the widget with tk —
+        # raising afterwards leaves a half-built widget parented to master
+        # that crashes on destroy()
+        if text_position not in ("right", "left", "top", "bottom"):
+            raise ValueError(f"text_position must be 'right', 'left', 'top' or 'bottom', not {text_position!r}")
 
         # transfer basic functionality (_bg_color, size, __appearance_mode, scaling) to CTkBaseClass
         super().__init__(master=master, bg_color=bg_color, width=width, height=height, **kwargs)
@@ -62,6 +70,8 @@ class CTkCheckBox(CTkBaseClass):
 
         # text
         self._text = text
+        self._text_position = text_position  # validated at the top of __init__
+        self._text_spacing = text_spacing
         self._text_label: Union[tkinter.Label, None] = None
         self._text_color = ThemeManager.theme["CTkCheckBox"]["text_color"] if text_color is None else self._check_color_type(text_color)
         self._text_color_disabled = ThemeManager.theme["CTkCheckBox"]["text_color_disabled"] if text_color_disabled is None else self._check_color_type(text_color_disabled)
@@ -84,23 +94,18 @@ class CTkCheckBox(CTkBaseClass):
         self._textvariable: tkinter.Variable = textvariable
         self._variable_callback_name = None
 
-        # configure grid system (1x3)
-        self.grid_columnconfigure(0, weight=0)
-        self.grid_columnconfigure(1, weight=0, minsize=self._apply_widget_scaling(6))
-        self.grid_columnconfigure(2, weight=1)
-        self.grid_rowconfigure(0, weight=1)
-
+        # widgets — laid out by _create_grid() (text_position-aware)
         self._bg_canvas = CTkCanvas(master=self,
                                     highlightthickness=0,
+                                    takefocus=False,
                                     width=self._apply_widget_scaling(self._desired_width),
                                     height=self._apply_widget_scaling(self._desired_height))
-        self._bg_canvas.grid(row=0, column=0, columnspan=3, sticky="nswe")
 
         self._canvas = CTkCanvas(master=self,
                                  highlightthickness=0,
+                                 takefocus=False,
                                  width=self._apply_widget_scaling(self._checkbox_width),
                                  height=self._apply_widget_scaling(self._checkbox_height))
-        self._canvas.grid(row=0, column=0, sticky="e")
         self._draw_engine = DrawEngine(self._canvas)
 
         self._text_label = tkinter.Label(master=self,
@@ -111,8 +116,9 @@ class CTkCheckBox(CTkBaseClass):
                                          justify=tkinter.LEFT,
                                          font=self._apply_font_scaling(self._font),
                                          textvariable=self._textvariable)
-        self._text_label.grid(row=0, column=2, sticky="w")
         self._text_label["anchor"] = "w"
+
+        self._create_grid()
 
         # register variable callback and set state according to variable
         if self._variable is not None and self._variable != "":
@@ -135,10 +141,57 @@ class CTkCheckBox(CTkBaseClass):
             self._canvas.bind("<Button-1>", self.toggle)
             self._text_label.bind("<Button-1>", self.toggle)
 
+    def _create_grid(self):
+        """ Lay out box / spacer / label per text_position + text_spacing.
+
+        Single source of truth for the widget's grid — called from
+        __init__, configure(), _set_scaling() and _update_font().
+        text_position="right" with the default text_spacing reproduces the
+        stock CustomTkinter 1x3 layout. An empty text collapses the label
+        cell entirely (no label widget, no spacer). """
+        spacing = self._apply_widget_scaling(self._text_spacing)
+        has_text = bool(self._text)
+
+        # Reset every slot we might touch so a re-grid coming from a
+        # different text_position leaves no stale weight / minsize behind.
+        for i in range(3):
+            self.grid_columnconfigure(i, weight=0, minsize=0)
+            self.grid_rowconfigure(i, weight=0, minsize=0)
+        self._bg_canvas.grid_forget()
+        self._canvas.grid_forget()
+        self._text_label.grid_forget()
+
+        if self._text_position in ("right", "left"):
+            # box + label share row 0 across three columns; the label
+            # column carries the stretch weight, the spacer sits between.
+            self.grid_rowconfigure(0, weight=1)
+            box_col, label_col = (0, 2) if self._text_position == "right" else (2, 0)
+            label_sticky = "w" if self._text_position == "right" else "e"
+            self.grid_columnconfigure(label_col, weight=1)
+            self._bg_canvas.grid(row=0, column=0, columnspan=3, sticky="nswe")
+            self._canvas.grid(row=0, column=box_col, sticky="e")
+            if has_text:
+                self.grid_columnconfigure(1, weight=0, minsize=spacing)
+                self._text_label.grid(row=0, column=label_col, sticky=label_sticky)
+                self._text_label["anchor"] = label_sticky
+        else:
+            # box + label share column 0 across three rows; the label
+            # row carries the stretch weight, the spacer sits between.
+            self.grid_columnconfigure(0, weight=1)
+            box_row, label_row = (2, 0) if self._text_position == "top" else (0, 2)
+            label_sticky = "s" if self._text_position == "top" else "n"
+            self.grid_rowconfigure(label_row, weight=1)
+            self._bg_canvas.grid(row=0, column=0, rowspan=3, sticky="nswe")
+            self._canvas.grid(row=box_row, column=0, sticky="")
+            if has_text:
+                self.grid_rowconfigure(1, weight=0, minsize=spacing)
+                self._text_label.grid(row=label_row, column=0, sticky="")
+                self._text_label["anchor"] = "center"
+
     def _set_scaling(self, *args, **kwargs):
         super()._set_scaling(*args, **kwargs)
 
-        self.grid_columnconfigure(1, weight=0, minsize=self._apply_widget_scaling(6))
+        self._create_grid()
         self._text_label.configure(font=self._apply_font_scaling(self._font))
 
         self._canvas.delete("checkmark")
@@ -161,8 +214,9 @@ class CTkCheckBox(CTkBaseClass):
 
             # Workaround to force grid to be resized when text changes size.
             # Otherwise grid will lag and only resizes if other mouse action occurs.
-            self._bg_canvas.grid_forget()
-            self._bg_canvas.grid(row=0, column=0, columnspan=3, sticky="nswe")
+            # _create_grid() re-runs the full (text_position-aware) layout,
+            # which includes the grid_forget()/grid() the workaround relies on.
+            self._create_grid()
 
     def destroy(self):
         if self._variable is not None:
@@ -221,13 +275,7 @@ class CTkCheckBox(CTkBaseClass):
             self._text_label.configure(bg=self._apply_appearance_mode(self._bg_color))
 
     def configure(self, require_redraw=False, **kwargs):
-        if "corner_radius" in kwargs:
-            self._corner_radius = kwargs.pop("corner_radius")
-            require_redraw = True
-
-        if "border_width" in kwargs:
-            self._border_width = kwargs.pop("border_width")
-            require_redraw = True
+        require_new_state = False
 
         if "checkbox_width" in kwargs:
             self._checkbox_width = kwargs.pop("checkbox_width")
@@ -239,22 +287,12 @@ class CTkCheckBox(CTkBaseClass):
             self._canvas.configure(height=self._apply_widget_scaling(self._checkbox_height))
             require_redraw = True
 
-        if "text" in kwargs:
-            self._text = kwargs.pop("text")
-            self._text_label.configure(text=self._text)
+        if "corner_radius" in kwargs:
+            self._corner_radius = kwargs.pop("corner_radius")
+            require_redraw = True
 
-        if "font" in kwargs:
-            if isinstance(self._font, CTkFont):
-                self._font.remove_size_configure_callback(self._update_font)
-            self._font = self._check_font_type(kwargs.pop("font"))
-            if isinstance(self._font, CTkFont):
-                self._font.add_size_configure_callback(self._update_font)
-
-            self._update_font()
-
-        if "state" in kwargs:
-            self._state = kwargs.pop("state")
-            self._set_cursor()
+        if "border_width" in kwargs:
+            self._border_width = kwargs.pop("border_width")
             require_redraw = True
 
         if "fg_color" in kwargs:
@@ -281,38 +319,80 @@ class CTkCheckBox(CTkBaseClass):
             self._text_color_disabled = self._check_color_type(kwargs.pop("text_color_disabled"))
             require_redraw = True
 
+        if "text" in kwargs:
+            new_text = kwargs.pop("text")
+            # an empty text collapses the label cell, so toggling emptiness
+            # has to re-run the layout
+            text_emptiness_changed = bool(new_text) != bool(self._text)
+            self._text = new_text
+            self._text_label.configure(text=self._text)
+            if text_emptiness_changed:
+                self._create_grid()
+
+        if "text_position" in kwargs:
+            new_position = kwargs.pop("text_position")
+            if new_position not in ("right", "left", "top", "bottom"):
+                raise ValueError(f"text_position must be 'right', 'left', 'top' or 'bottom', not {new_position!r}")
+            self._text_position = new_position
+            self._create_grid()
+
+        if "text_spacing" in kwargs:
+            self._text_spacing = kwargs.pop("text_spacing")
+            self._create_grid()
+
+        if "font" in kwargs:
+            if isinstance(self._font, CTkFont):
+                self._font.remove_size_configure_callback(self._update_font)
+            self._font = self._check_font_type(kwargs.pop("font"))
+            if isinstance(self._font, CTkFont):
+                self._font.add_size_configure_callback(self._update_font)
+            self._update_font()
+
+        if "textvariable" in kwargs:
+            self._textvariable = kwargs.pop("textvariable")
+            self._text_label.configure(textvariable=self._textvariable)
+
+        if "state" in kwargs:
+            self._state = kwargs.pop("state")
+            self._set_cursor()
+            require_redraw = True
+
         if "hover" in kwargs:
             self._hover = kwargs.pop("hover")
 
         if "command" in kwargs:
             self._command = kwargs.pop("command")
 
-        if "textvariable" in kwargs:
-            self._textvariable = kwargs.pop("textvariable")
-            self._text_label.configure(textvariable=self._textvariable)
+        if "onvalue" in kwargs:
+            self._onvalue = kwargs.pop("onvalue")
+            require_new_state = True
+
+        if "offvalue" in kwargs:
+            self._offvalue = kwargs.pop("offvalue")
+            require_new_state = True
 
         if "variable" in kwargs:
             if self._variable is not None and self._variable != "":
                 self._variable.trace_remove("write", self._variable_callback_name)  # remove old variable callback
-
             self._variable = kwargs.pop("variable")
-
             if self._variable is not None and self._variable != "":
                 self._variable_callback_name = self._variable.trace_add("write", self._variable_callback)
-                self._check_state = True if self._variable.get() == self._onvalue else False
-                require_redraw = True
+                require_new_state = True
 
+        if require_new_state and self._variable is not None and self._variable != "":
+            self._check_state = True if self._variable.get() == self._onvalue else False
+            require_redraw = True
         super().configure(require_redraw=require_redraw, **kwargs)
 
     def cget(self, attribute_name: str) -> any:
-        if attribute_name == "corner_radius":
-            return self._corner_radius
-        elif attribute_name == "border_width":
-            return self._border_width
-        elif attribute_name == "checkbox_width":
+        if attribute_name == "checkbox_width":
             return self._checkbox_width
         elif attribute_name == "checkbox_height":
             return self._checkbox_height
+        elif attribute_name == "corner_radius":
+            return self._corner_radius
+        elif attribute_name == "border_width":
+            return self._border_width
 
         elif attribute_name == "fg_color":
             return self._fg_color
@@ -329,6 +409,10 @@ class CTkCheckBox(CTkBaseClass):
 
         elif attribute_name == "text":
             return self._text
+        elif attribute_name == "text_position":
+            return self._text_position
+        elif attribute_name == "text_spacing":
+            return self._text_spacing
         elif attribute_name == "font":
             return self._font
         elif attribute_name == "textvariable":
@@ -337,12 +421,15 @@ class CTkCheckBox(CTkBaseClass):
             return self._state
         elif attribute_name == "hover":
             return self._hover
+        elif attribute_name == "command":
+            return self._command
         elif attribute_name == "onvalue":
             return self._onvalue
         elif attribute_name == "offvalue":
             return self._offvalue
         elif attribute_name == "variable":
             return self._variable
+
         else:
             return super().cget(attribute_name)
 
@@ -404,41 +491,28 @@ class CTkCheckBox(CTkBaseClass):
                 self.select(from_variable_callback=True)
             elif self._variable.get() == self._offvalue:
                 self.deselect(from_variable_callback=True)
+    
+    def set(self, state: bool, from_variable_callback=False):
+        self._check_state = state
+        self._draw()
+
+        if self._variable is not None and not from_variable_callback:
+            self._variable_callback_blocked = True
+            self._variable.set(self._onvalue if self._check_state is True else self._offvalue)
+            self._variable_callback_blocked = False
 
     def toggle(self, event=0):
         if self._state == tkinter.NORMAL:
-            if self._check_state is True:
-                self._check_state = False
-                self._draw()
-            else:
-                self._check_state = True
-                self._draw()
-
-            if self._variable is not None:
-                self._variable_callback_blocked = True
-                self._variable.set(self._onvalue if self._check_state is True else self._offvalue)
-                self._variable_callback_blocked = False
+            self.set(not self._check_state)
 
             if self._command is not None:
                 self._command()
 
     def select(self, from_variable_callback=False):
-        self._check_state = True
-        self._draw()
-
-        if self._variable is not None and not from_variable_callback:
-            self._variable_callback_blocked = True
-            self._variable.set(self._onvalue)
-            self._variable_callback_blocked = False
+        self.set(True, from_variable_callback)
 
     def deselect(self, from_variable_callback=False):
-        self._check_state = False
-        self._draw()
-
-        if self._variable is not None and not from_variable_callback:
-            self._variable_callback_blocked = True
-            self._variable.set(self._offvalue)
-            self._variable_callback_blocked = False
+        self.set(False, from_variable_callback)
 
     def get(self) -> Union[int, str]:
         return self._onvalue if self._check_state is True else self._offvalue

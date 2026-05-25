@@ -1,4 +1,5 @@
 import tkinter
+import copy
 import sys
 from typing import Union, Tuple, Callable, List, Optional
 
@@ -19,6 +20,7 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
                  font: Optional[Union[tuple, CTkFont]] = None,
                  command: Union[Callable, None] = None,
                  values: Optional[List[str]] = None,
+                 justify: str = "left",
                  **kwargs):
 
         # call init methods of super classes
@@ -40,6 +42,7 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
 
         self._values = values
         self._command = command
+        self._justify = justify
 
         self._add_menu_commands()
 
@@ -90,16 +93,19 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
 
         self.delete(0, "end")  # delete all old commands
 
-        if sys.platform.startswith("linux"):
-            for value in self._values:
-                self.add_command(label="  " + value.ljust(self._min_character_width) + "  ",
-                                 command=lambda v=value: self._button_callback(v),
-                                 compound="left")
-        else:
-            for value in self._values:
-                self.add_command(label=value.ljust(self._min_character_width),
-                                 command=lambda v=value: self._button_callback(v),
-                                 compound="left")
+        pad_prefix = "  " if sys.platform.startswith("linux") else ""
+        pad_suffix = pad_prefix
+
+        for value in self._values:
+            if self._justify == "right":
+                padded = value.rjust(self._min_character_width)
+            elif self._justify == "center":
+                padded = value.center(self._min_character_width)
+            else:
+                padded = value.ljust(self._min_character_width)
+            self.add_command(label=pad_prefix + padded + pad_suffix,
+                             command=lambda v=value: self._button_callback(v),
+                             compound="left")
 
     def _button_callback(self, value):
         if self._command is not None:
@@ -112,12 +118,34 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
         else:
             y += self._apply_widget_scaling(3)
 
+        # flip dropdown above the widget if it would extend past the screen bottom
+        try:
+            screen_height = self.winfo_screenheight()
+            item_count = len(self._values) if self._values else 0
+            estimated_item_height = self._apply_widget_scaling(28)
+            estimated_height = item_count * estimated_item_height + self._apply_widget_scaling(8)
+
+            if y + estimated_height > screen_height and y > estimated_height:
+                y = y - estimated_height - self._apply_widget_scaling(6)
+        except Exception:
+            pass
+
         if sys.platform == "darwin" or sys.platform.startswith("win"):
             self.post(int(x), int(y))
         else:  # Linux
             self.tk_popup(int(x), int(y))
 
+    def close(self):
+        self.unpost()
+
+    def is_open(self) -> bool:
+        return bool(self.winfo_viewable())
+
     def configure(self, **kwargs):
+        if "min_character_width" in kwargs:
+            self._min_character_width = kwargs.pop("min_character_width")
+            self._add_menu_commands()
+
         if "fg_color" in kwargs:
             self._fg_color = self._check_color_type(kwargs.pop("fg_color"))
             super().configure(bg=self._apply_appearance_mode(self._fg_color))
@@ -136,7 +164,6 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
             self._font = self._check_font_type(kwargs.pop("font"))
             if isinstance(self._font, CTkFont):
                 self._font.add_size_configure_callback(self._update_font)
-
             self._update_font()
 
         if "command" in kwargs:
@@ -144,6 +171,10 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
 
         if "values" in kwargs:
             self._values = kwargs.pop("values")
+            self._add_menu_commands()
+
+        if "justify" in kwargs:
+            self._justify = kwargs.pop("justify")
             self._add_menu_commands()
 
         super().configure(**kwargs)
@@ -164,7 +195,9 @@ class DropdownMenu(tkinter.Menu, CTkAppearanceModeBaseClass, CTkScalingBaseClass
         elif attribute_name == "command":
             return self._command
         elif attribute_name == "values":
-            return self._values
+            return copy.copy(self._values)
+        elif attribute_name == "justify":
+            return self._justify
 
         else:
             return super().cget(attribute_name)

@@ -36,7 +36,7 @@ STATUS_RETRYING     = "retrying"
 
 # Minimum allowed logging interval in milliseconds.
 # Enforced in the Connections screen UI and respected by the logger.
-MIN_INTERVAL_MS = 100
+MIN_INTERVAL_MS = 25
 
 
 # ── PLCConnection ─────────────────────────────────────────────────────────

@@ -10,9 +10,34 @@ from .widgets.theme import ThemeManager
 from .widgets.scaling import CTkScalingBaseClass
 from .widgets.appearance_mode import CTkAppearanceModeBaseClass
 
-from customtkinter.windows.widgets.utility.utility_functions import pop_from_dict_by_set, check_kwargs_empty
+from customtkinter.windows.widgets.utility.utility_functions import pop_from_dict_by_set, check_kwargs_empty, safe_focus
 
 CTK_PARENT_CLASS = tkinter.Tk
+
+
+# Reconfigure Tk's named fonts to Segoe UI on Windows. The OS default
+# (MS Shell Dlg 2 / Tahoma) clashes with CTk's modern look and lacks the
+# coverage Segoe UI Variable has built in (Latin, Cyrillic, Greek, Georgian,
+# Arabic, Hebrew, Thai, Devanagari natively + CJK via GDI font linking).
+# Covers tk-native widgets that fall through to TkDefaultFont — tk.Menu,
+# tooltip popups, native dropdowns, dialogs.
+_NAMED_FONTS_CONFIGURED = False
+
+def _configure_windows_named_fonts():
+    global _NAMED_FONTS_CONFIGURED
+    if _NAMED_FONTS_CONFIGURED:
+        return
+    _NAMED_FONTS_CONFIGURED = True
+    import tkinter.font as tkfont
+    for name in (
+        "TkDefaultFont", "TkTextFont", "TkFixedFont",
+        "TkMenuFont", "TkHeadingFont", "TkCaptionFont",
+        "TkSmallCaptionFont", "TkIconFont", "TkTooltipFont",
+    ):
+        try:
+            tkfont.nametofont(name).configure(family="Segoe UI")
+        except tkinter.TclError:
+            pass
 
 
 class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
@@ -38,6 +63,11 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
 
         # call init methods of super classes
         CTK_PARENT_CLASS.__init__(self, **pop_from_dict_by_set(kwargs, self._valid_tk_constructor_arguments))
+
+        if sys.platform.startswith("win"):
+            _configure_windows_named_fonts()
+            self.option_add("*Font", "{Segoe UI} 11")
+
         CTkAppearanceModeBaseClass.__init__(self)
         CTkScalingBaseClass.__init__(self, scaling_type="window")
         check_kwargs_empty(kwargs, raise_error=True)
@@ -65,6 +95,7 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
         self._withdraw_called_before_window_exists = False  # indicates if withdraw() was called before window is first shown through update() or mainloop()
         self._iconify_called_before_window_exists = False  # indicates if iconify() was called before window is first shown through update() or mainloop()
         self._block_update_dimensions_event = False
+        self._titlebar_frame_changed_done = False  # SWP_FRAMECHANGED runs once per window (see _windows_reapply_titlebar_color)
 
         # save focus before calling withdraw
         self.focused_widget_before_widthdraw = None
@@ -79,6 +110,16 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
 
         self.bind('<Configure>', self._update_dimensions_event)
         self.bind('<FocusIn>', self._focus_in_event)
+        # Windows drops the dark titlebar on map / deiconify; re-apply it then.
+        # <Map> also covers un-iconify, so no separate deiconify hook is needed.
+        self.bind('<Map>', self._windows_reapply_titlebar_color, add="+")
+        # Allows CTkEntry and CTkTextbox to lose focus when clicking elsewhere.
+        # Guarded so click on a widget without focus_set (e.g. a native Menu)
+        # does not raise AttributeError (per Federico's 8c85d9b follow-up).
+        def set_focus(event: tkinter.Event):
+            if hasattr(event.widget, "focus_set"):
+                event.widget.focus_set()
+        self.bind_all("<Button-1>", set_focus, add=True)
 
     def destroy(self):
         self._disable_macos_dark_title_bar()
@@ -92,6 +133,10 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
         # sometimes window looses jumps back on macOS if window is selected from Mission Control, so has to be lifted again
         if sys.platform == "darwin":
             self.lift()
+        # Windows invalidates the titlebar's non-client cache on focus changes;
+        # re-apply the dark/light attribute so it doesn't revert to system light.
+        elif sys.platform.startswith("win"):
+            self._windows_reapply_titlebar_color()
 
     def _update_dimensions_event(self, event=None):
         if not self._block_update_dimensions_event:
@@ -220,6 +265,7 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
     def cget(self, attribute_name: str) -> any:
         if attribute_name == "fg_color":
             return self._fg_color
+
         else:
             return super().cget(attribute_name)
 
@@ -290,7 +336,9 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
                 return
 
             try:
-                hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+                # winfo_id() is an inner caption-less 'TkChild' window;
+                # DWM styles the parent frame. See _windows_titlebar_hwnd.
+                hwnd = self._windows_titlebar_hwnd()
                 DWMWA_USE_IMMERSIVE_DARK_MODE = 20
                 DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19
 
@@ -321,8 +369,119 @@ class CTk(CTK_PARENT_CLASS, CTkAppearanceModeBaseClass, CTkScalingBaseClass):
                 pass  # wait for update or mainloop to be called
 
             if self.focused_widget_before_widthdraw is not None:
-                self.after(1, self.focused_widget_before_widthdraw.focus)
+                self.after(1, safe_focus, self.focused_widget_before_widthdraw)
                 self.focused_widget_before_widthdraw = None
+
+    def _windows_titlebar_hwnd(self) -> int:
+        """HWND that actually carries the window caption.
+
+        Tk's winfo_id() returns an inner 'TkChild' window with no
+        caption (WS_CAPTION unset); the decorated frame that DWM
+        styles is its parent. Falls back to winfo_id() if GetParent
+        yields nothing.
+        """
+        try:
+            child = self.winfo_id()
+            parent = ctypes.windll.user32.GetParent(child)
+            return parent if parent else child
+        except Exception:
+            return 0
+
+    def _windows_reapply_titlebar_color(self, event=None):
+        """Lightweight re-apply of the DWM dark/light titlebar attribute.
+
+        Windows invalidates the non-client cache on map / focus / restore
+        events, so the titlebar reverts to the system light style. This re-sets
+        the attribute without the withdraw/deiconify cycle that
+        _windows_set_titlebar_color uses, so there is no flicker. It is
+        appearance-mode-aware: it follows the current mode, it does not force
+        dark, and it does not fight a runtime appearance-mode switch.
+        No-op on non-Windows platforms.
+        """
+        if not sys.platform.startswith("win") or self._deactivate_windows_window_header_manipulation:
+            return
+        try:
+            if self.overrideredirect():  # chromeless popups have no titlebar
+                return
+        except Exception:
+            pass
+
+        hwnd = self._windows_titlebar_hwnd()
+        if not hwnd:
+            return
+
+        value = 1 if str(self._get_appearance_mode()).lower() == "dark" else 0
+
+        try:
+            DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+            DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19
+
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                                          ctypes.byref(ctypes.c_int(value)),
+                                                          ctypes.sizeof(ctypes.c_int(value))) != 0:
+                ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1,
+                                                           ctypes.byref(ctypes.c_int(value)),
+                                                           ctypes.sizeof(ctypes.c_int(value)))
+
+            # Once per window lifetime: force a full non-client redraw so the
+            # very first paint picks up the attribute without a light flash.
+            # SetWindowPos with SWP_FRAMECHANGED is expensive, so it runs only
+            # once — later focus/map events repaint the NC area on their own.
+            if not self._titlebar_frame_changed_done:
+                self._titlebar_frame_changed_done = True
+                SWP_NOSIZE = 0x0001
+                SWP_NOMOVE = 0x0002
+                SWP_NOZORDER = 0x0004
+                SWP_FRAMECHANGED = 0x0020
+                ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+                                                  SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED)
+        except Exception as err:
+            print(err)
+
+    def save_geometry(self) -> str:
+        """Save current geometry as a DPI-independent string.
+        Returns a string like '900x600+100+200' in logical (unscaled) coordinates.
+        Use restore_geometry() to restore it safely."""
+        return self.geometry()
+
+    def restore_geometry(self, geometry_string: str):
+        """Restore geometry with screen bounds clamping.
+        Ensures the window is fully visible on the current screen setup,
+        even if the DPI or monitor configuration has changed since saving."""
+        if not geometry_string:
+            return
+
+        width, height, x, y = self._parse_geometry_string(geometry_string)
+
+        if width is None or height is None:
+            # just position, no size — apply directly
+            self.geometry(geometry_string)
+            return
+
+        # get current screen dimensions (in logical coordinates)
+        try:
+            screen_w = self._reverse_window_scaling(self.winfo_screenwidth())
+            screen_h = self._reverse_window_scaling(self.winfo_screenheight())
+        except Exception:
+            self.geometry(geometry_string)
+            return
+
+        # clamp size to screen
+        width = max(self._min_width, min(width, screen_w))
+        height = max(self._min_height, min(height, screen_h))
+
+        # clamp position: ensure at least 100px of the window is visible
+        min_visible = 100
+        if x is not None and y is not None:
+            # ensure window is not completely off-screen
+            x = max(-(width - min_visible), min(x, screen_w - min_visible))
+            y = max(0, min(y, screen_h - min_visible))
+        else:
+            # center on screen if no position was saved
+            x = max(0, (screen_w - width) // 2)
+            y = max(0, (screen_h - height) // 2)
+
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def _set_appearance_mode(self, mode_string: str):
         super()._set_appearance_mode(mode_string)

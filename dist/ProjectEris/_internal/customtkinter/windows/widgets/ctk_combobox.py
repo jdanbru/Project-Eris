@@ -43,6 +43,8 @@ class CTkComboBox(CTkBaseClass):
                  variable: Union[tkinter.Variable, None] = None,
                  command: Union[Callable[[str], Any], None] = None,
                  justify: str = "left",
+                 selectbackground: Optional[Union[str, Tuple[str, str]]] = None,
+                 selectforeground: Optional[Union[str, Tuple[str, str]]] = None,
                  **kwargs):
 
         # transfer basic functionality (_bg_color, size, __appearance_mode, scaling) to CTkBaseClass
@@ -59,7 +61,9 @@ class CTkComboBox(CTkBaseClass):
         self._button_hover_color = ThemeManager.theme["CTkComboBox"]["button_hover_color"] if button_hover_color is None else self._check_color_type(button_hover_color)
         self._text_color = ThemeManager.theme["CTkComboBox"]["text_color"] if text_color is None else self._check_color_type(text_color)
         self._text_color_disabled = ThemeManager.theme["CTkComboBox"]["text_color_disabled"] if text_color_disabled is None else self._check_color_type(text_color_disabled)
-
+        self._selectbackground = None if selectbackground is None else self._check_color_type(selectbackground) #if parameter missing use default selection color, maybe replace with ThemeManager.theme["CTkComboBox"]["button_color"] or ThemeManager.theme["CTkButton"]["button_color"]
+        self._selectforeground = ThemeManager.theme["CTkComboBox"]["text_color"] if selectforeground is None else self._check_color_type(selectforeground)
+        
         # font
         self._font = CTkFont() if font is None else self._check_font_type(font)
         if isinstance(self._font, CTkFont):
@@ -82,7 +86,9 @@ class CTkComboBox(CTkBaseClass):
                                            fg_color=dropdown_fg_color,
                                            hover_color=dropdown_hover_color,
                                            text_color=dropdown_text_color,
-                                           font=dropdown_font)
+                                           font=dropdown_font,
+                                           justify=justify)
+        self._close_on_next_click: bool = False
 
         # configure grid system (1x1)
         self.grid_rowconfigure(0, weight=1)
@@ -205,7 +211,9 @@ class CTkComboBox(CTkBaseClass):
                                   disabledbackground=self._apply_appearance_mode(self._fg_color),
                                   disabledforeground=self._apply_appearance_mode(self._text_color_disabled),
                                   highlightcolor=self._apply_appearance_mode(self._fg_color),
-                                  insertbackground=self._apply_appearance_mode(self._text_color))
+                                  insertbackground=self._apply_appearance_mode(self._text_color),
+                                  selectbackground=self._apply_appearance_mode(self._selectbackground),
+                                  selectforeground=self._apply_appearance_mode(self._selectforeground))
 
             if self._state == tkinter.DISABLED:
                 self._canvas.itemconfig("dropdown_arrow",
@@ -217,6 +225,8 @@ class CTkComboBox(CTkBaseClass):
     def _open_dropdown_menu(self):
         self._dropdown_menu.open(self.winfo_rootx(),
                                  self.winfo_rooty() + self._apply_widget_scaling(self._current_height + 0))
+        # Set AFTER open() to avoid misfire if open() ever raises (per 8c85d9b).
+        self._close_on_next_click = True
 
     def configure(self, require_redraw=False, **kwargs):
         if "corner_radius" in kwargs:
@@ -267,7 +277,6 @@ class CTkComboBox(CTkBaseClass):
             self._font = self._check_font_type(kwargs.pop("font"))
             if isinstance(self._font, CTkFont):
                 self._font.add_size_configure_callback(self._update_font)
-
             self._update_font()
 
         if "dropdown_font" in kwargs:
@@ -293,7 +302,16 @@ class CTkComboBox(CTkBaseClass):
             self._command = kwargs.pop("command")
 
         if "justify" in kwargs:
-            self._entry.configure(justify=kwargs.pop("justify"))
+            justify = kwargs.pop("justify")
+            self._entry.configure(justify=justify)
+            self._dropdown_menu.configure(justify=justify)
+
+        if "selectbackground" in kwargs:
+            self._selectbackground = self._check_color_type(kwargs.pop("selectbackground"))
+            require_redraw = True
+        if "selectforeground" in kwargs:
+            self._selectforeground = self._check_color_type(kwargs.pop("selectforeground"))
+            require_redraw = True
 
         super().configure(require_redraw=require_redraw, **kwargs)
 
@@ -321,6 +339,10 @@ class CTkComboBox(CTkBaseClass):
             return self._text_color
         elif attribute_name == "text_color_disabled":
             return self._text_color_disabled
+        elif attribute_name == "selectbackground":
+            return self._selectbackground
+        elif attribute_name == "selectforeground":
+            return self._selectforeground
 
         elif attribute_name == "font":
             return self._font
@@ -338,10 +360,12 @@ class CTkComboBox(CTkBaseClass):
             return self._command
         elif attribute_name == "justify":
             return self._entry.cget("justify")
+
         else:
             return super().cget(attribute_name)
 
     def _on_enter(self, event=0):
+        self._close_on_next_click = self._dropdown_menu.is_open()
         if self._hover is True and self._state == tkinter.NORMAL and len(self._values) > 0:
             if sys.platform == "darwin" and len(self._values) > 0 and self._cursor_manipulation_enabled:
                 self._canvas.configure(cursor="pointinghand")
@@ -396,8 +420,19 @@ class CTkComboBox(CTkBaseClass):
     def get(self) -> str:
         return self._entry.get()
 
+    def index(self, value: Optional[Any] = None) -> int:
+        """ returns index of selected value, raises ValueError if the value is missing
+        if the parameter is provided, returns the associated index or raises ValueError if no value is found """
+        if value is None:
+            return self._values.index(self.get())
+        else:
+            return self._values.index(value)
+
     def _clicked(self, event=None):
-        if self._state is not tkinter.DISABLED and len(self._values) > 0:
+        if self._close_on_next_click:
+            self._dropdown_menu.close()
+            self._close_on_next_click = False
+        elif self._state is not tkinter.DISABLED and len(self._values) > 0:
             self._open_dropdown_menu()
 
     def bind(self, sequence=None, command=None, add=True):

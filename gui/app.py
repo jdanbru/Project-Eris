@@ -16,7 +16,6 @@ App is responsible for:
   - Polling the PLCs every 800 ms to refresh the dashboard while logging
   - Saving config to disk whenever settings or connections change
   - Cleaning up (stopping logger, disconnecting PLCs) on window close
-  - Toggling the dark/light theme and persisting the preference
 
 Nothing in this file communicates directly with PLCs or writes to CSV —
 all of that is delegated to the plc/ and logger/ modules.
@@ -36,6 +35,7 @@ from gui.connections import ConnectionsScreen
 from gui.csv_screen import CSVScreen
 from gui.diagnostics import DiagnosticsScreen
 from gui.help_screen import HelpScreen
+from gui.data_viewer import DataViewerScreen
 from gui.settings_screen import SettingsScreen
 
 
@@ -47,7 +47,7 @@ class App(ctk.CTk):
         self.minsize(880, 580)
 
         self._cfg = load_config()
-        ctk.set_appearance_mode(self._cfg.get("theme", "light"))
+        ctk.set_appearance_mode("light")   # dark mode removed in v4.3
 
         self._cm = ConnectionManager(on_status_change=self._on_status)
         self._logger = CSVLogger(self._cfg, self._cm,
@@ -73,7 +73,6 @@ class App(ctk.CTk):
             on_nav=self._show,
             on_conn_select=self._sel_conn,
             on_add_conn=self._add_conn,
-            on_theme_toggle=self._toggle_theme,
         )
         self.sidebar.grid(row=0, column=0, sticky="nsew")
 
@@ -86,6 +85,7 @@ class App(ctk.CTk):
         self._dash  = DashboardScreen(main,
                                        on_toggle_log=self._toggle_log,
                                        on_connect=self._connect_all)
+        self._data_viewer = DataViewerScreen(main)
         self._conns = ConnectionsScreen(main,
                                          on_save=self._save_conn,
                                          on_delete=self._del_conn,
@@ -97,6 +97,7 @@ class App(ctk.CTk):
 
         self._screens = {
             "dashboard":   self._dash,
+            "data_viewer": self._data_viewer,
             "connections": self._conns,
             "csv":         self._csv,
             "diagnostics": self._diag,
@@ -258,14 +259,6 @@ class App(ctk.CTk):
         save_config(self._cfg)
         messagebox.showinfo("Saved", "Settings saved.")
 
-    # ── theme ─────────────────────────────────────────────────────────────
-    def _toggle_theme(self):
-        current = ctk.get_appearance_mode().lower()
-        new     = "dark" if current == "light" else "light"
-        ctk.set_appearance_mode(new)
-        self._cfg["theme"] = new
-        save_config(self._cfg)
-        self.sidebar.update_theme_icon(new)
 
     # ── close ─────────────────────────────────────────────────────────────
     def _on_close(self):

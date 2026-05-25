@@ -127,7 +127,7 @@ class ConnectionsScreen(ctk.CTkFrame):
                      text=f"Interval (ms, min {MIN_INTERVAL_MS}ms)",
                      font=ctk.CTkFont(size=11), text_color=text_muted(),
                      anchor="w").grid(row=0, column=0, sticky="w")
-        self._interval_var = ctk.StringVar(value="1000")
+        self._interval_var = ctk.StringVar(value="50")
         self._interval_entry = ctk.CTkEntry(self._interval_frame,
                                              textvariable=self._interval_var,
                                              width=120)
@@ -274,8 +274,8 @@ class ConnectionsScreen(ctk.CTkFrame):
                 return MIN_INTERVAL_MS
             return ms
         except ValueError:
-            self._interval_var.set("1000")
-            return 1000
+            self._interval_var.set("50")
+            return 50
 
     def load_connection(self, conn_cfg):
         self._current = conn_cfg
@@ -307,7 +307,7 @@ class ConnectionsScreen(ctk.CTkFrame):
             pt = conn_cfg.get("plc_type", "ab")
             self._type_var.set("Allen-Bradley (pylogix)" if pt == "ab" else "Siemens S7 (snap7)")
             self._log_mode_var.set(conn_cfg.get("log_mode", "interval"))
-            self._interval_var.set(str(conn_cfg.get("log_interval_ms", 1000)))
+            self._interval_var.set(str(conn_cfg.get("log_interval_ms", 50)))
             self._trigger_var.set(conn_cfg.get("trigger_tag", ""))
             self._sep_csv_var.set(conn_cfg.get("separate_csv", False))
             self._on_type(None)

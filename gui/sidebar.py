@@ -7,7 +7,6 @@ Contains:
   - Company logo (loaded from assets/logo.png)
   - "JD Controls, LLC" company name (top)
   - "Project Eris" product name (below company name)
-  - Dark/light mode toggle button
   - Navigation buttons for each screen
   - Scrollable list of PLC connection cards showing live status
   - "Add connection" button
@@ -28,6 +27,7 @@ from gui.theme import STATUS_COLORS, badge_colors, BLUE_PRIMARY, BLUE_LIGHT
 # The order here is the order they appear in the sidebar.
 NAV_ITEMS = [
     ("dashboard",   "Dashboard"),
+    ("data_viewer", "Data Viewer"),
     ("connections", "Connections"),
     ("csv",         "CSV Logs"),
     ("diagnostics", "Diagnostics"),
@@ -47,16 +47,14 @@ class Sidebar(ctk.CTkFrame):
         on_nav(screen_key)       – called when the user clicks a nav button
         on_conn_select(conn_id)  – called when the user clicks a connection card
         on_add_conn()            – called when the user clicks "+ Add connection"
-        on_theme_toggle()        – called when the user clicks the theme button
     """
 
-    def __init__(self, parent, on_nav, on_conn_select, on_add_conn, on_theme_toggle):
+    def __init__(self, parent, on_nav, on_conn_select, on_add_conn):
         super().__init__(parent, width=220, corner_radius=0,
                          fg_color=("gray95", "gray14"), border_width=0)
         self.on_nav          = on_nav
         self.on_conn_select  = on_conn_select
         self.on_add_conn     = on_add_conn
-        self.on_theme_toggle = on_theme_toggle
         self._nav_btns       = {}   # { screen_key: CTkButton }
         self._active         = None  # currently highlighted nav key
         self.grid_propagate(False)   # keep the sidebar at its fixed width
@@ -97,26 +95,10 @@ class Sidebar(ctk.CTkFrame):
                      font=ctk.CTkFont(size=15, weight="bold"),
                      anchor="w").grid(row=0, column=0, sticky="w")
 
-        # Theme toggle button (☀ light / 🌙 dark)
-        # Icon is updated dynamically by update_theme_icon()
-        self._theme_btn = ctk.CTkButton(
-            title_row,
-            text="☀",
-            width=28, height=24,
-            font=ctk.CTkFont(size=14),
-            fg_color="transparent",
-            border_width=1,
-            border_color=("gray75", "gray40"),
-            text_color=("gray30", "gray80"),
-            hover_color=("gray85", "gray28"),
-            corner_radius=6,
-            command=self.on_theme_toggle,
-        )
-        self._theme_btn.grid(row=0, column=1, sticky="e")
 
         # ── "Project Eris" — product name, second line ────────────────────
         ctk.CTkLabel(hdr,
-                     text="  Project Eris  v2.0",
+                     text="  Project Eris  v4.3",
                      font=ctk.CTkFont(size=10),
                      text_color=("gray55", "gray55"),
                      anchor="w").grid(row=2, column=0, sticky="w", padx=12, pady=(0, 10))
@@ -271,6 +253,3 @@ class Sidebar(ctk.CTkFrame):
                 w.bind("<Button-1>", lambda e, c=cid: self.on_conn_select(c))
                 for child in w.winfo_children():
                     child.bind("<Button-1>", lambda e, c=cid: self.on_conn_select(c))
-
-    def update_theme_icon(self, mode):
-        self._theme_btn.configure(text="☀" if mode == "dark" else "🌙")

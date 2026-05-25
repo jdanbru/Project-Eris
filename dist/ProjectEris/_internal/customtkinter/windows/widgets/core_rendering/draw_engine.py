@@ -26,34 +26,46 @@ class DrawEngine:
 
     """
 
-    preferred_drawing_method: str = None  # 'polygon_shapes', 'font_shapes', 'circle_shapes'
+    DRAWING_METHODS: list[str] = ["polygon_shapes", "font_shapes", "circle_shapes"]
+    preferred_drawing_method: str = None
 
     def __init__(self, canvas: CTkCanvas):
         self._canvas = canvas
         self._round_width_to_even_numbers: bool = True
         self._round_height_to_even_numbers: bool = True
+        if sys.platform.startswith("linux"):
+            self.preferred_drawing_method = "circle_shapes"
 
     def set_round_to_even_numbers(self, round_width_to_even_numbers: bool = True, round_height_to_even_numbers: bool = True):
         self._round_width_to_even_numbers: bool = round_width_to_even_numbers
         self._round_height_to_even_numbers: bool = round_height_to_even_numbers
 
     def __calc_optimal_corner_radius(self, user_corner_radius: Union[float, int]) -> Union[float, int]:
-        # optimize for drawing with polygon shapes
+        """Optimize corner radius based on the preferred drawing method and platform."""
+
+        # Optimize for drawing with polygon shapes
         if self.preferred_drawing_method == "polygon_shapes":
             if sys.platform == "darwin":
-                return user_corner_radius
+                return user_corner_radius  # Direct use for macOS
+            elif sys.platform.startswith("linux"):
+                return round(user_corner_radius * 1.25) / 1.25  # Fine-tuned rounding for smoother rendering on Linux
             else:
-                return round(user_corner_radius)
+                return round(user_corner_radius)  # Default for other platforms
 
-        # optimize for drawing with antialiased font shapes
+        # Optimize for drawing with antialiased font shapes
         elif self.preferred_drawing_method == "font_shapes":
             return round(user_corner_radius)
 
-        # optimize for drawing with circles and rects
+        # Optimize for drawing with circles and rects
         elif self.preferred_drawing_method == "circle_shapes":
-            user_corner_radius = 0.5 * round(user_corner_radius / 0.5)  # round to 0.5 steps
+            if sys.platform.startswith("linux"):
+                # Allow finer increments for smoother Linux rendering
+                user_corner_radius = 0.25 * round(user_corner_radius / 0.25)
+            else:
+                # Default behavior for other platforms
+                user_corner_radius = 0.5 * round(user_corner_radius / 0.5)
 
-            # make sure the value is always with .5 at the end for smoother corners
+            # Ensure the value always ends in .5 for smoother corners
             if user_corner_radius == 0:
                 return 0
             elif user_corner_radius % 1 == 0:
@@ -324,6 +336,11 @@ class DrawEngine:
 
     def __draw_rounded_rect_with_border_circle_shapes(self, width: int, height: int, corner_radius: int, border_width: int, inner_corner_radius: int) -> bool:
         requires_recoloring = False
+
+        # Adjust shapes for Linux rendering
+        if sys.platform.startswith("linux"):
+            corner_radius = max(corner_radius - 0.5, 0)
+            border_width = max(border_width - 0.2, 0)
 
         # border button parts
         if border_width > 0:
@@ -703,7 +720,7 @@ class DrawEngine:
         if self._round_height_to_even_numbers:
             height = math.floor(height / 2) * 2
 
-        if corner_radius > width / 2 or corner_radius > height / 2:  # restrict corner_radius if it's too larger
+        if corner_radius > width / 2 or corner_radius > height / 2:  # restrict corner_radius if it's too large
             corner_radius = min(width / 2, height / 2)
 
         border_width = round(border_width)
@@ -713,6 +730,11 @@ class DrawEngine:
             inner_corner_radius = corner_radius - border_width
         else:
             inner_corner_radius = 0
+
+        # clamp inner_corner_radius so progress fill doesn't collapse at small dimensions
+        max_inner_radius = max(0, min((width - 2 * border_width) / 2, (height - 2 * border_width) / 2))
+        if inner_corner_radius > max_inner_radius:
+            inner_corner_radius = max_inner_radius
 
         if self.preferred_drawing_method == "polygon_shapes" or self.preferred_drawing_method == "circle_shapes":
             return self.__draw_rounded_progress_bar_with_border_polygon_shapes(width, height, corner_radius, border_width, inner_corner_radius,
@@ -777,23 +799,27 @@ class DrawEngine:
                 self._canvas.create_aa_circle(0, 0, 0, tags=("progress_oval_2_b", "progress_corner_part", "progress_parts"), anchor=tkinter.CENTER, angle=180)
                 requires_recoloring = True
 
-            if not self._canvas.find_withtag("progress_oval_3_a") and round(inner_corner_radius) * 2 < height - 2 * border_width:
+            needs_extra_corners = (round(inner_corner_radius) * 2 < height - 2 * border_width and
+                                    round(inner_corner_radius) * 2 < width - 2 * border_width)
+            if not self._canvas.find_withtag("progress_oval_3_a") and needs_extra_corners:
                 self._canvas.create_aa_circle(0, 0, 0, tags=("progress_oval_3_a", "progress_corner_part", "progress_parts"), anchor=tkinter.CENTER)
                 self._canvas.create_aa_circle(0, 0, 0, tags=("progress_oval_3_b", "progress_corner_part", "progress_parts"), anchor=tkinter.CENTER, angle=180)
                 self._canvas.create_aa_circle(0, 0, 0, tags=("progress_oval_4_a", "progress_corner_part", "progress_parts"), anchor=tkinter.CENTER)
                 self._canvas.create_aa_circle(0, 0, 0, tags=("progress_oval_4_b", "progress_corner_part", "progress_parts"), anchor=tkinter.CENTER, angle=180)
                 requires_recoloring = True
-            elif self._canvas.find_withtag("progress_oval_3_a") and not round(inner_corner_radius) * 2 < height - 2 * border_width:
+            elif self._canvas.find_withtag("progress_oval_3_a") and not needs_extra_corners:
                 self._canvas.delete("progress_oval_3_a", "progress_oval_3_b", "progress_oval_4_a", "progress_oval_4_b")
 
         if not self._canvas.find_withtag("progress_rectangle_1"):
             self._canvas.create_rectangle(0, 0, 0, 0, tags=("progress_rectangle_1", "progress_rectangle_part", "progress_parts"), width=0)
             requires_recoloring = True
 
-        if not self._canvas.find_withtag("progress_rectangle_2") and inner_corner_radius * 2 < height - (border_width * 2):
+        needs_extra_rect = (inner_corner_radius * 2 < height - (border_width * 2) and
+                            inner_corner_radius * 2 < width - (border_width * 2))
+        if not self._canvas.find_withtag("progress_rectangle_2") and needs_extra_rect:
             self._canvas.create_rectangle(0, 0, 0, 0, tags=("progress_rectangle_2", "progress_rectangle_part", "progress_parts"), width=0)
             requires_recoloring = True
-        elif self._canvas.find_withtag("progress_rectangle_2") and not inner_corner_radius * 2 < height - (border_width * 2):
+        elif self._canvas.find_withtag("progress_rectangle_2") and not needs_extra_rect:
             self._canvas.delete("progress_rectangle_2")
 
         # horizontal orientation from the bottom
@@ -1079,7 +1105,7 @@ class DrawEngine:
                                 corner_radius + (width - 2 * corner_radius) * start_value, corner_radius,
                                 corner_radius + (width - 2 * corner_radius) * end_value, corner_radius,
                                 corner_radius + (width - 2 * corner_radius) * end_value, height - corner_radius,
-                                corner_radius + (width - 2 * corner_radius) * start_value, height - corner_radius,)
+                                corner_radius + (width - 2 * corner_radius) * start_value, height - corner_radius, )
 
         self._canvas.itemconfig("scrollbar_polygon_1", width=inner_corner_radius * 2)
 
