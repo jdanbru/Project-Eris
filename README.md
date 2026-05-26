@@ -6,6 +6,31 @@ live dashboard with trend chart, diagnostics, help guide, and dark/light mode.
 
 ---
 
+## Screen Shots
+
+**1. Dashboard**
+<img width="1022" height="692" alt="ProjectEris - 001 Dashboard" src="https://github.com/user-attachments/assets/5614f0d9-deb9-480a-b52d-4cb1e313d9e2" />
+
+**2. Data Viewer**
+<img width="1022" height="692" alt="ProjectEris - 002 Data Viewer" src="https://github.com/user-attachments/assets/119b234e-3e78-436c-ba39-16ad322744be" />
+
+**3. Connections**
+<img width="1022" height="692" alt="ProjectEris - 003 Connections" src="https://github.com/user-attachments/assets/5344f132-b12d-40cc-96fa-bfcac8f07e71" />
+
+**4. CSV Logs**
+<img width="1022" height="692" alt="ProjectEris - 004 CSV Logs" src="https://github.com/user-attachments/assets/631e8793-0e76-4543-8ce0-b7f68432a679" />
+
+**5. Diagnostics**
+<img width="1022" height="692" alt="ProjectEris - 005 Diagnostics" src="https://github.com/user-attachments/assets/24ee9989-c81f-45a6-946d-c45a56850c7e" />
+
+**6. Help**
+<img width="1022" height="692" alt="ProjectEris - 006 Help" src="https://github.com/user-attachments/assets/80cbb159-0624-4e70-a2dd-15053ad15ff2" />
+
+**7. Settings**
+<img width="1022" height="692" alt="ProjectEris - 007 Settings" src="https://github.com/user-attachments/assets/1c0e1a5b-0ca5-4eba-9b5e-a5abd4a65313" />
+
+---
+
 ## Quick start
 
 1. Install Python 3.13: https://www.python.org/ftp/python/3.13.3/python-3.13.3-amd64.exe
